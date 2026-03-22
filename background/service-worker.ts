@@ -14,9 +14,17 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: Funct
     return true;
   }
 
-  // Fetch external stylesheets (CORS bypass — service worker is not subject to page CORS)
+  // Fetch external stylesheets (CORS bypass)
   if (msg.action === 'fetchStylesheets') {
-    handleFetchStylesheets(msg.urls)
+    handleFetchResources(msg.urls)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({}));
+    return true;
+  }
+
+  // Fetch external scripts (CORS bypass)
+  if (msg.action === 'fetchScripts') {
+    handleFetchResources(msg.urls)
       .then(result => sendResponse(result))
       .catch(error => sendResponse({}));
     return true;
@@ -28,8 +36,8 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: Funct
   }
 });
 
-// ─── Fetch stylesheets with CORS bypass ──────────────────────
-async function handleFetchStylesheets(urls: string[]): Promise<Record<string, string>> {
+// ─── Fetch resources with CORS bypass ────────────────────────
+async function handleFetchResources(urls: string[]): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
 
   const fetches = urls.map(async (url) => {

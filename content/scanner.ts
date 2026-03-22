@@ -83,7 +83,7 @@ DL.runScan = async (mode: string): Promise<any> => {
   }
 
   if (mode === 'mirror') {
-    // TRUE 1:1 MIRROR — captures full DOM + all CSS stylesheets
+    // TRUE 1:1 MIRROR — captures full DOM + CSS + interaction JS
     sendProgress(0.05, 'Collecting stylesheet URLs...');
     const stylesheetUrls = DL._collectStylesheetUrls();
 
@@ -96,8 +96,20 @@ DL.runScan = async (mode: string): Promise<any> => {
       externalCSS = fetchResponse || {};
     }
 
-    sendProgress(0.5, 'Building page mirror...');
-    const html = DL.mirrorPage(externalCSS);
+    sendProgress(0.35, 'Collecting interaction scripts...');
+    const scriptUrls = DL._collectScriptUrls ? DL._collectScriptUrls() : [];
+
+    sendProgress(0.4, `Fetching ${scriptUrls.length} external scripts...`);
+    let externalJS: Record<string, string> = {};
+    if (scriptUrls.length > 0) {
+      const fetchJSResponse: any = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ action: 'fetchScripts', urls: scriptUrls }, resolve);
+      });
+      externalJS = fetchJSResponse || {};
+    }
+
+    sendProgress(0.6, 'Building page mirror...');
+    const html = DL.mirrorPage(externalCSS, externalJS);
 
     sendProgress(0.85, 'Downloading mirror HTML...');
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
