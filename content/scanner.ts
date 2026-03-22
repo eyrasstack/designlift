@@ -50,6 +50,11 @@ DL.runScan = async (mode: string): Promise<any> => {
     result.styledClone = DL.cloneStyled();
   }
 
+  if (mode === 'clone-full') {
+    // Full 1:1 clone with inline styles — the real deal
+    result.fullClone = DL.fullClone();
+  }
+
   if (mode === 'structure' || mode === 'both') {
     sendProgress(0.9, 'Cloning page structure...');
     result.structure = DL.cloneStructure();

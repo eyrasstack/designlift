@@ -325,6 +325,22 @@ document.querySelectorAll('.dl-tab').forEach(tab => {
 $('#btn-tokens').addEventListener('click', () => startScan('tokens'));
 $('#btn-structure').addEventListener('click', () => startScan('structure'));
 $('#btn-both').addEventListener('click', () => startScan('both'));
+$('#btn-fullclone').addEventListener('click', () => {
+  startScan('clone-full');
+  const check = setInterval(() => {
+    if (scanData?.fullClone?.jsx) {
+      clearInterval(check);
+      const blob = new Blob([scanData.fullClone.jsx], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'clone-full.tsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }, 500);
+});
+
 $('#btn-clone').addEventListener('click', () => {
   startScan('clone-styled');
   // Auto-download the styled JSX when scan completes

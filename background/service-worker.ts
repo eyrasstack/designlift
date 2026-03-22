@@ -31,6 +31,7 @@ async function handleScan(mode: string) {
       'content/extractor.js',
       'content/styles.js',
       'content/cloner.js',
+      'content/fullclone.js',
       'content/scanner.js'
     ]
   });
