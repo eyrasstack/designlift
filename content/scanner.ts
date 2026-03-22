@@ -71,8 +71,9 @@ DL.runScan = async (mode: string): Promise<any> => {
       externalJS = fetchJSResponse || {};
     }
 
+    sendProgress(0.55, 'Scrolling page to load lazy images...');
     sendProgress(0.6, 'Building page mirror...');
-    const html = DL.mirrorPage(externalCSS, externalJS);
+    const html = await DL.mirrorPage(externalCSS, externalJS);
 
     sendProgress(0.85, 'Downloading mirror HTML...');
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });

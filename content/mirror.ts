@@ -148,16 +148,91 @@ DL._resolveUrlsInCSS = (cssText: string, baseUrl: string): string => {
   );
 };
 
-// ─── Fix lazy-loaded images ──────────────────────────────────
+// ─── Scroll page to force lazy images to load ───────────────
+// Native loading="lazy" + srcset images won't load until scrolled into view.
+// We scroll through the entire page, then wait for all images to finish loading.
+DL._scrollToLoadLazyImages = async (): Promise<void> => {
+  const origScroll = window.scrollY;
+  const fullHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  const vh = window.innerHeight;
+  const steps = Math.ceil(fullHeight / vh);
+
+  // Scroll through the page in viewport-sized steps
+  for (let i = 0; i <= steps; i++) {
+    window.scrollTo(0, i * vh);
+    // Short pause lets the browser trigger lazy load observers
+    await new Promise(r => setTimeout(r, 150));
+  }
+
+  // Scroll to bottom then back to top to catch any edge cases
+  window.scrollTo(0, fullHeight);
+  await new Promise(r => setTimeout(r, 200));
+
+  // Restore original scroll position
+  window.scrollTo(0, origScroll);
+
+  // Wait for all images to finish loading (with timeout)
+  const images = Array.from(document.querySelectorAll('img'));
+  const pendingImages = images.filter(img => !img.complete && img.src);
+  if (pendingImages.length > 0) {
+    await Promise.allSettled(
+      pendingImages.map(img =>
+        new Promise<void>(resolve => {
+          img.addEventListener('load', () => resolve(), { once: true });
+          img.addEventListener('error', () => resolve(), { once: true });
+          // Don't wait forever for any single image
+          setTimeout(resolve, 3000);
+        })
+      )
+    );
+  }
+};
+
+// ─── Fix lazy-loaded images in the clone ─────────────────────
+// After scrolling, map each cloned img to its live counterpart's loaded src.
 DL._fixLazyImages = (root: HTMLElement): void => {
-  root.querySelectorAll('img').forEach(img => {
-    const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-lazy') || img.getAttribute('data-original');
-    if (dataSrc && (!img.getAttribute('src') || img.getAttribute('src') === '')) {
-      img.setAttribute('src', dataSrc);
+  const liveImages = Array.from(document.querySelectorAll('img'));
+  const cloneImages = Array.from(root.querySelectorAll('img'));
+
+  cloneImages.forEach((img, index) => {
+    const src = img.getAttribute('src') || '';
+    const isPlaceholder = !src || src === '' || src.startsWith('data:');
+
+    // Best fix: use the live image's currentSrc (the actual loaded URL after srcset resolution)
+    const liveImg = liveImages[index] as HTMLImageElement | undefined;
+    if (liveImg?.currentSrc && !liveImg.currentSrc.startsWith('data:')) {
+      img.setAttribute('src', liveImg.currentSrc);
     }
-    // Try to use currentSrc from the live page
-    const liveImg = document.querySelector(`img[alt="${img.getAttribute('alt')}"]`) as HTMLImageElement;
-    if (liveImg?.currentSrc) img.setAttribute('src', liveImg.currentSrc);
+
+    // Fallback: if src is still a placeholder, pull from data-src attributes
+    // Shopify themes (lazyloadt4s) use data-src with SVG placeholders in src
+    const currentSrc = img.getAttribute('src') || '';
+    if (!currentSrc || currentSrc.startsWith('data:')) {
+      const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-lazy') ||
+                      img.getAttribute('data-original');
+      if (dataSrc) {
+        // Resolve protocol-relative URLs
+        const resolved = dataSrc.startsWith('//') ? 'https:' + dataSrc : dataSrc;
+        img.setAttribute('src', resolved);
+      }
+    }
+
+    // Copy data-srcset → srcset if the lazy loader never ran
+    if (!img.getAttribute('srcset') && img.getAttribute('data-srcset')) {
+      img.setAttribute('srcset', img.getAttribute('data-srcset')!);
+    }
+
+    // Resolve srcset URLs to absolute so images work in the exported file
+    const srcset = img.getAttribute('srcset');
+    if (srcset) {
+      const resolved = srcset.replace(/((?:^|,)\s*)(\S+)/g, (_m, prefix, url) => {
+        if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('//')) return prefix + url;
+        try { return prefix + new URL(url, window.location.href).href; } catch { return prefix + url; }
+      });
+      img.setAttribute('srcset', resolved);
+    }
+
+    // Remove loading="lazy" so images load immediately in the exported HTML
     img.removeAttribute('loading');
   });
 };
@@ -195,6 +270,11 @@ DL._cleanClone = (root: HTMLElement): void => {
 
     // Remove noscript
     if (el.tagName === 'NOSCRIPT') { toRemove.push(el); return; }
+
+    // Remove lazy-loader placeholder/spinner elements (Shopify lazyloadt4s theme)
+    if (el.tagName === 'SPAN' && el.classList.contains('lazyloadt4s-loader')) {
+      toRemove.push(el); return;
+    }
 
     // Remove tracking iframes
     if (el.tagName === 'IFRAME') {
@@ -262,8 +342,11 @@ DL._collectScriptUrls = (): string[] => {
 };
 
 // ─── Main mirror function ────────────────────────────────────
-DL.mirrorPage = (externalCSS: Record<string, string>, externalJS: Record<string, string>): string => {
-  // Deep clone the entire document
+DL.mirrorPage = async (externalCSS: Record<string, string>, externalJS: Record<string, string>): Promise<string> => {
+  // Scroll the page first to force all lazy images to load
+  await DL._scrollToLoadLazyImages();
+
+  // Deep clone the entire document (now with all images loaded)
   const clone = document.documentElement.cloneNode(true) as HTMLElement;
 
   // Fix lazy images
