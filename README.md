@@ -1,143 +1,127 @@
 # DesignLift
 
-Chrome Extension (Manifest V3) that extracts the full design system from any website and clones its page structure into clean, reusable code.
+Chrome Extension (Manifest V3) that extracts design systems and creates true 1:1 mirrors of any website.
 
 **Two modes:**
-1. **Extract Design Tokens** — colors, typography, spacing, shadows, animations, breakpoints
-2. **Clone Page Structure** — clean semantic HTML/JSX with extracted design tokens applied
-
-Works on any site — Shopify, WordPress, custom builds, whatever. Output is clean enough to drop into a Next.js/Tailwind project immediately.
+1. **Extract Design Tokens** — colors, typography, spacing, shadows, animations, breakpoints from any site
+2. **Mirror Site (1:1 Clone)** — captures the full rendered page as a self-contained HTML file with all CSS, fonts, images, and interaction scripts preserved
 
 ## Install
 
 ```bash
-# Clone the repo
 git clone https://github.com/eyrasstack/designlift.git
 cd designlift
-
-# Install TypeScript
 npm install
-
-# Generate icons + compile + copy assets
 bash build.sh
 ```
 
 Then load the extension:
 1. Go to `chrome://extensions`
-2. Enable **Developer mode** (top-right toggle)
+2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select the `dist/` folder
 
 ## How to Use
 
+### Extract Design Tokens
 1. Navigate to any website
-2. Click the DesignLift icon in your toolbar
-3. Choose a mode:
-   - **Extract Design Tokens** — analyzes colors, fonts, spacing, shadows, animations, breakpoints
-   - **Clone Page Structure** — captures the page's DOM as clean, semantic HTML
-   - **Extract Both** — runs both at once
-4. Browse results in the tabbed view (Colors | Type | Space | Structure | Full)
-5. Export in your preferred format
+2. Click the DesignLift icon
+3. Click **Extract Design Tokens**
+4. Browse results in tabs (Colors | Type | Space | Structure | Full)
+5. Export as Tailwind Config, CSS Variables, JSON Tokens, or JSX
 
-## Export Formats
+### Mirror Site (1:1 Clone)
+1. Navigate to the page you want to clone
+2. Click the DesignLift icon
+3. Click the purple **Mirror Site (1:1 Clone)** button
+4. Wait while it fetches stylesheets and scripts
+5. Downloads two files:
+   - **`{hostname}-mirror.html`** — the complete page clone
+   - **`page-screenshot.png`** — full-page reference screenshot
+6. Open the HTML file in your browser — it renders identically to the original
+
+## What the Mirror Captures
+
+- **Full rendered DOM** — captured after JavaScript execution (dynamic content included)
+- **All CSS stylesheets** — external sheets fetched and inlined (CORS bypassed via service worker)
+- **CSS animations & hover states** — actual stylesheet rules preserved, not computed
+- **Media queries** — responsive styles included
+- **@font-face rules** — with real font file CDN URLs
+- **Interaction scripts** — Webflow runtime, jQuery, GSAP, Lottie, Swiper kept
+- **Images & videos** — URLs preserved (loaded from original CDN)
+- **SVGs** — inline SVGs preserved as-is
+- **Form elements** — inputs, selects, textareas with placeholders and options
+
+### What gets stripped
+- Google Analytics, GTM, Facebook Pixel
+- Cookie consent banners (CookieYes, OneTrust, Finsweet)
+- Chat widgets (Intercom, Drift, Crisp, Zendesk)
+- reCAPTCHA, Hotjar, Segment, Mixpanel, Sentry
+- Tracking pixels and hidden iframes
+- Event handler attributes (`onclick`, etc.)
+
+## Token Export Formats
 
 | Format | File | Description |
 |--------|------|-------------|
-| **Tailwind Config** | `tailwind-extend.ts` | Drop-in theme extension for your `tailwind.config.ts` |
-| **CSS Variables** | `globals.css` | Custom properties ready for any project |
-| **JSON Tokens** | `tokens.json` | Raw token data for design tools or custom pipelines |
-| **JSX Components** | `structure.jsx` | Cloned page structure as a React component |
-| **Design System** | `design-system.ts` | Complete token file with colors, typography, spacing, shadows, transitions |
-
-## What Gets Extracted
-
-### Colors
-- Text colors (primary, secondary, muted — ranked by frequency)
-- Background & surface colors
-- Border, shadow, and accent colors
-- SVG fill/stroke colors
-- Gradient colors
-- Similar colors merged automatically (RGB distance < 15)
-
-### Typography
-- Font families with Google Fonts URL detection
-- Font sizes mapped to semantic roles (hero, h1–h4, body, small, label)
-- Weights, line heights, letter spacing
-- Text transform patterns
-
-### Spacing
-- Full spacing scale mapped to Tailwind classes
-- Container max-width detection
-- Section padding patterns
-- Grid gap and card padding
-
-### Borders & Shadows
-- All border-radius values (with pill detection)
-- Border widths
-- Box shadows categorized as sm/md/lg/xl/glow/inner
-
-### Animations
-- Transition properties, durations, and easing curves
-- Sorted by frequency
-
-### Breakpoints
-- All `@media` min/max-width values from stylesheets
-
-### Structure Clone
-- Semantic HTML output with `dl-` prefixed classes
-- Section auto-classification (hero, nav, product-grid, cta-banner, faq, footer, etc.)
-- Scripts, styles, tracking, cookie banners — all stripped
-- Images replaced with descriptive placeholders
-- Redundant wrapper divs flattened
-- Links converted to relative paths
+| Tailwind Config | `tailwind-extend.ts` | Theme extension for `tailwind.config.ts` |
+| CSS Variables | `globals.css` | Custom properties for any project |
+| JSON Tokens | `tokens.json` | Raw token data |
+| JSX Components | `structure.jsx` | Page structure as a React component |
+| Design System | `design-system.ts` | Complete token file |
 
 ## Tech Stack
 
 - Chrome Extension Manifest V3
-- TypeScript (compiled with `tsc`)
+- TypeScript
 - Content scripts for DOM/CSS analysis
+- Service worker for CORS-free resource fetching
 - Dark-themed popup UI
-- Zero external dependencies — pure browser APIs
+- Zero external runtime dependencies
 
 ## Project Structure
 
 ```
 designlift/
-  manifest.json           # Extension manifest (MV3)
-  tsconfig.json           # TypeScript config
-  build.sh                # Build script
-  generate-icons.js       # Creates PNG icons (no dependencies)
-  global.d.ts             # Shared type declarations
+  manifest.json
+  tsconfig.json
+  build.sh
+  generate-icons.js
+  global.d.ts
   popup/
-    popup.html            # Extension popup UI
-    popup.css             # Dark theme styling
-    popup.ts              # UI logic, triggers scans, displays results
+    popup.html
+    popup.css
+    popup.ts
   content/
-    utils.ts              # Color parsing, helpers, element utilities
-    extractor.ts          # Design token extraction engine
-    cloner.ts             # Page structure cloner
-    scanner.ts            # Orchestrator — coordinates extraction
+    utils.ts          — color parsing, helpers
+    extractor.ts       — design token extraction
+    cloner.ts          — page structure cloner (JSX output)
+    mirror.ts          — TRUE 1:1 mirror engine (HTML output)
+    scanner.ts         — orchestrator + screenshot capture
   background/
-    service-worker.ts     # Message routing between popup and content scripts
+    service-worker.ts  — message routing, CSS/JS fetching, screenshots
   output/
-    formatters.ts         # Formats tokens into Tailwind, CSS, JSON, JSX
+    formatters.ts      — token → Tailwind/CSS/JSON formatters
   icons/
     icon-{16,32,48,128}.png
-  dist/                   # Built extension (load this in Chrome)
+  dist/                — built extension (load this in Chrome)
 ```
 
 ## Development
 
 ```bash
-# Edit any .ts file, then rebuild
+# Edit .ts files, then rebuild
 bash build.sh
 
-# Reload the extension in chrome://extensions (click the refresh icon)
+# Reload in chrome://extensions
 ```
 
-## Limitations
+## Version History
 
-- CORS-blocked stylesheets fall back to `getComputedStyle()` — token extraction still works, breakpoint detection may miss some values
-- Scans up to 500 visible elements for performance (covers most pages)
-- Shadow DOM components with closed roots are skipped
-- Commercial/custom fonts are detected but can't be downloaded — the Google Fonts URL is captured when available
+- **v3.1** — Mirror mode with interaction JS (Webflow, jQuery, GSAP preserved)
+- **v3.0** — Mirror mode: full DOM + all CSS as self-contained HTML
+- **v2.0** — Full clone with inline styles (deprecated)
+- **v1.3** — Improved style extraction accuracy
+- **v1.2** — Styled clone with Tailwind classes (deprecated)
+- **v1.1** — Version badge, extraction fixes
+- **v1.0** — Initial release: design token extraction

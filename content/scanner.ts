@@ -45,43 +45,6 @@ DL.runScan = async (mode: string): Promise<any> => {
     result.breakpoints = DL.extractBreakpoints();
   }
 
-  if (mode === 'clone-styled') {
-    sendProgress(0.9, 'Building 1:1 styled clone...');
-    result.styledClone = DL.cloneStyled();
-  }
-
-  if (mode === 'clone-full') {
-    // Full 1:1 clone with inline styles
-    const cloneResult = DL.fullClone();
-
-    // Download the JSX file
-    sendProgress(0.92, 'Downloading clone-full.tsx...');
-    const blob = new Blob([cloneResult.jsx], { type: 'text/plain' });
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = 'clone-full.tsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-
-    // Capture full-page screenshot by scrolling + stitching
-    sendProgress(0.93, 'Capturing full-page screenshot...');
-    try {
-      await DL.captureFullPageScreenshot();
-    } catch (e: any) {
-      console.warn('Screenshot capture failed:', e.message);
-    }
-
-    result.fullClone = {
-      sourceUrl: cloneResult.sourceUrl,
-      timestamp: cloneResult.timestamp,
-      viewport: cloneResult.viewport,
-      downloaded: true,
-    };
-  }
-
   if (mode === 'mirror') {
     // TRUE 1:1 MIRROR — captures full DOM + CSS + interaction JS
     sendProgress(0.05, 'Collecting stylesheet URLs...');
