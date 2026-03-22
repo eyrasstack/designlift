@@ -45,6 +45,11 @@ DL.runScan = async (mode: string): Promise<any> => {
     result.breakpoints = DL.extractBreakpoints();
   }
 
+  if (mode === 'clone-styled') {
+    sendProgress(0.9, 'Building 1:1 styled clone...');
+    result.styledClone = DL.cloneStyled();
+  }
+
   if (mode === 'structure' || mode === 'both') {
     sendProgress(0.9, 'Cloning page structure...');
     result.structure = DL.cloneStructure();

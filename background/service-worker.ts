@@ -29,6 +29,7 @@ async function handleScan(mode: string) {
     files: [
       'content/utils.js',
       'content/extractor.js',
+      'content/styles.js',
       'content/cloner.js',
       'content/scanner.js'
     ]

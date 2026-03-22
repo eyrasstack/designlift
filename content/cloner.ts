@@ -222,7 +222,167 @@ DL.cleanDOM = (el: HTMLElement, depth: number = 0): string => {
   return `${indent}<${tag}${attrs}>\n${childrenHTML}${indent}</${tag}>\n`;
 };
 
-// Main entry: clone the full page structure
+// ─── STYLED CLONE — outputs JSX with Tailwind classes ────────
+// This is the 1:1 clone mode that captures computed styles per element
+
+DL.cleanDOMStyled = (el: HTMLElement, depth: number = 0): string => {
+  if (depth > 15) return '';
+  if (DL.shouldSkipElement(el)) return '';
+
+  let tag = el.tagName.toLowerCase();
+  const indent = '  '.repeat(depth);
+
+  // Get Tailwind classes from computed styles
+  const tw = DL.getElementTailwind ? DL.getElementTailwind(el) : '';
+  const fontVar = DL.getFontVar ? DL.getFontVar(el) : '';
+  const allClasses = [tw, fontVar].filter(Boolean).join(' ');
+
+  // Images — keep src + add styling
+  if (tag === 'img') {
+    const alt = el.getAttribute('alt') || '';
+    const src = el.getAttribute('src') || el.getAttribute('data-src') || '';
+    const ar = DL.getAspectRatio ? DL.getAspectRatio(el) : '';
+    const cls = [allClasses, ar].filter(Boolean).join(' ');
+    return `${indent}<img className="${cls}" alt="${alt}" src="${src}" />\n`;
+  }
+
+  if (tag === 'picture') {
+    const img = el.querySelector('img');
+    const alt = img?.getAttribute('alt') || '';
+    const src = img?.getAttribute('src') || '';
+    return `${indent}<img className="${allClasses} w-full" alt="${alt}" src="${src}" />\n`;
+  }
+
+  if (tag === 'video') {
+    const src = (el as HTMLVideoElement).querySelector('source')?.getAttribute('src') || '';
+    return `${indent}<video className="${allClasses}" muted autoPlay loop playsInline>\n${indent}  <source src="${src}" type="video/mp4" />\n${indent}</video>\n`;
+  }
+
+  if (tag === 'svg') {
+    const w = el.getAttribute('width') || '';
+    const h = el.getAttribute('height') || '';
+    return `${indent}<div className="${allClasses}" style={{width:'${w}px',height:'${h}px'}}>{/* SVG */}</div>\n`;
+  }
+
+  // Self-closing
+  if (tag === 'br') return `${indent}<br />\n`;
+  if (tag === 'hr') return `${indent}<hr className="${allClasses}" />\n`;
+  if (tag === 'input') {
+    const type = el.getAttribute('type') || 'text';
+    const ph = el.getAttribute('placeholder') || '';
+    const name = el.getAttribute('name') || '';
+    return `${indent}<input className="${allClasses}" type="${type}" placeholder="${ph}" name="${name}" />\n`;
+  }
+
+  // Select — capture options
+  if (tag === 'select') {
+    const name = el.getAttribute('name') || '';
+    let optionsHtml = '';
+    el.querySelectorAll('option').forEach(opt => {
+      const val = opt.getAttribute('value') || '';
+      const text = opt.textContent?.trim() || '';
+      optionsHtml += `${indent}  <option value="${val}">${text}</option>\n`;
+    });
+    return `${indent}<select className="${allClasses}" name="${name}">\n${optionsHtml}${indent}</select>\n`;
+  }
+
+  // Textarea
+  if (tag === 'textarea') {
+    const ph = el.getAttribute('placeholder') || '';
+    return `${indent}<textarea className="${allClasses}" placeholder="${ph}" />\n`;
+  }
+
+  // Convert div roles to semantic tags
+  const role = el.getAttribute('role');
+  if (tag === 'div') {
+    if (role === 'navigation') tag = 'nav';
+    else if (role === 'banner') tag = 'header';
+    else if (role === 'contentinfo') tag = 'footer';
+    else if (role === 'main') tag = 'main';
+  }
+
+  // Build children
+  let childrenHTML = '';
+  for (const child of Array.from(el.childNodes)) {
+    if (child.nodeType === 3) {
+      const text = child.textContent?.trim();
+      if (text) {
+        // Escape JSX special chars
+        const escaped = text.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+        childrenHTML += indent + '  ' + escaped + '\n';
+      }
+    } else if (child.nodeType === 1) {
+      childrenHTML += DL.cleanDOMStyled(child as HTMLElement, depth + 1);
+    }
+  }
+
+  // Skip empty non-semantic containers
+  if (!childrenHTML.trim() && !SEMANTIC_TAGS.has(el.tagName) && !['a', 'button', 'form'].includes(tag)) {
+    return '';
+  }
+
+  // Build element
+  let attrs = '';
+  if (allClasses) attrs += ` className="${allClasses}"`;
+
+  if (tag === 'a') {
+    let href = el.getAttribute('href') || '#';
+    try {
+      const url = new URL(href, window.location.origin);
+      if (url.hostname === window.location.hostname) href = url.pathname;
+    } catch (e) {}
+    attrs += ` href="${href}"`;
+  }
+
+  if (tag === 'button') attrs += ` type="${el.getAttribute('type') || 'button'}"`;
+  if (tag === 'form') {
+    attrs += ` action="${el.getAttribute('action') || '#'}"`;
+    if (el.getAttribute('method')) attrs += ` method="${el.getAttribute('method')}"`;
+  }
+
+  const isInline = INLINE_TAGS.has(el.tagName);
+  if (isInline && childrenHTML.trim().split('\n').length === 1) {
+    return `${indent}<${tag}${attrs}>${childrenHTML.trim()}</${tag}>\n`;
+  }
+  return `${indent}<${tag}${attrs}>\n${childrenHTML}${indent}</${tag}>\n`;
+};
+
+// ─── Main: styled clone ──────────────────────────────────────
+DL.cloneStyled = (): any => {
+  const topLevel = Array.from(document.body.children).filter(el => {
+    if (SKIP_TAGS.has(el.tagName)) return false;
+    try { return !DL.shouldSkipElement(el as HTMLElement); } catch { return false; }
+  });
+
+  const sections = topLevel.map(el => ({
+    type: DL.classifySection(el as HTMLElement),
+    tag: el.tagName.toLowerCase(),
+    heading: el.querySelector('h1, h2, h3')?.textContent?.trim().slice(0, 80) || null
+  }));
+
+  // Get page-level styles for the wrapper
+  const bodyTw = DL.getElementTailwind ? DL.getElementTailwind(document.body) : '';
+
+  let jsx = `// 1:1 Clone by DesignLift from ${window.location.href}\n`;
+  jsx += `// ${new Date().toISOString().split('T')[0]}\n`;
+  jsx += `// Sections: ${sections.map(s => s.type).join(', ')}\n\n`;
+  jsx += `export default function ClonedPage() {\n  return (\n    <div className="${bodyTw}">\n`;
+
+  for (const el of topLevel) {
+    jsx += DL.cleanDOMStyled(el as HTMLElement, 3);
+  }
+
+  jsx += `    </div>\n  );\n}\n`;
+
+  return {
+    jsx,
+    sections,
+    sourceUrl: window.location.href,
+    timestamp: new Date().toISOString()
+  };
+};
+
+// Main entry: clone the full page structure (original unstyled version)
 DL.cloneStructure = (): any => {
   const topLevel = Array.from(document.body.children).filter(el => {
     if (SKIP_TAGS.has(el.tagName)) return false;
