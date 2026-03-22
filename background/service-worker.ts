@@ -6,9 +6,16 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: Funct
     return true; // keep channel open for async
   }
 
+  // Capture a single viewport screenshot — called by content script during scroll-capture
+  if (msg.action === 'captureViewport') {
+    chrome.tabs.captureVisibleTab(null as any, { format: 'png' }, (dataUrl: string) => {
+      sendResponse({ dataUrl });
+    });
+    return true;
+  }
+
   // Forward progress messages from content script to popup
   if (msg.action === 'scanProgress' || msg.action === 'scanError') {
-    // These are sent from content script — relay to all extension pages
     chrome.runtime.sendMessage(msg).catch(() => {});
   }
 });
@@ -17,13 +24,11 @@ async function handleScan(mode: string) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error('No active tab found');
 
-  // Check for restricted pages
   const url = tab.url || '';
   if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:')) {
     throw new Error('Cannot scan browser internal pages. Navigate to a website first.');
   }
 
-  // Inject content scripts in order — they share the isolated world scope
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: [
@@ -36,7 +41,6 @@ async function handleScan(mode: string) {
     ]
   });
 
-  // Send scan command and await the content script's response
   const response = await chrome.tabs.sendMessage(tab.id, { action: 'runScan', mode });
   return response;
 }

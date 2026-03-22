@@ -52,19 +52,28 @@ DL.runScan = async (mode: string): Promise<any> => {
 
   if (mode === 'clone-full') {
     // Full 1:1 clone with inline styles
-    // Output is too large for message passing — trigger download directly from content script
     const cloneResult = DL.fullClone();
-    // Create a blob and download directly in the page context
+
+    // Download the JSX file
+    sendProgress(0.92, 'Downloading clone-full.tsx...');
     const blob = new Blob([cloneResult.jsx], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = blobUrl;
     a.download = 'clone-full.tsx';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    // Return metadata only (not the huge JSX string)
+    URL.revokeObjectURL(blobUrl);
+
+    // Capture full-page screenshot by scrolling + stitching
+    sendProgress(0.93, 'Capturing full-page screenshot...');
+    try {
+      await DL.captureFullPageScreenshot();
+    } catch (e: any) {
+      console.warn('Screenshot capture failed:', e.message);
+    }
+
     result.fullClone = {
       sourceUrl: cloneResult.sourceUrl,
       timestamp: cloneResult.timestamp,
@@ -95,6 +104,81 @@ DL.runScan = async (mode: string): Promise<any> => {
 
   sendProgress(1.0, 'Complete!');
   return result;
+};
+
+// ─── Full-page screenshot capture ────────────────────────────
+// Scrolls the page, captures each viewport via background script,
+// stitches into one tall image, and downloads as PNG.
+DL.captureFullPageScreenshot = async (): Promise<void> => {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const fullHeight = Math.max(
+    document.body.scrollHeight,
+    document.documentElement.scrollHeight
+  );
+  const steps = Math.ceil(fullHeight / vh);
+  const maxSteps = Math.min(steps, 15); // cap at 15 screens
+
+  // Save current scroll position
+  const origScroll = window.scrollY;
+
+  // Capture each viewport
+  const captures: string[] = [];
+  for (let i = 0; i < maxSteps; i++) {
+    const scrollY = i * vh;
+    window.scrollTo(0, scrollY);
+    // Wait for repaint
+    await new Promise(r => setTimeout(r, 300));
+
+    // Request screenshot from background service worker
+    const response: any = await new Promise(resolve => {
+      chrome.runtime.sendMessage({ action: 'captureViewport' }, resolve);
+    });
+
+    if (response?.dataUrl) {
+      captures.push(response.dataUrl);
+    }
+  }
+
+  // Restore scroll
+  window.scrollTo(0, origScroll);
+
+  if (captures.length === 0) return;
+
+  // Stitch screenshots on a canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = vw * window.devicePixelRatio;
+  // Last section might be partial
+  const lastSectionHeight = fullHeight - (maxSteps - 1) * vh;
+  const totalHeight = ((maxSteps - 1) * vh + Math.min(lastSectionHeight, vh));
+  canvas.height = totalHeight * window.devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  // Load and draw each capture
+  for (let i = 0; i < captures.length; i++) {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => resolve(); // skip failed images
+      img.src = captures[i];
+    });
+    const y = i * vh * window.devicePixelRatio;
+    ctx.drawImage(img, 0, y);
+  }
+
+  // Convert canvas to blob and download
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'page-screenshot.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 'image/png');
 };
 
 // Set up message listener (guard against duplicate listeners on re-injection)
