@@ -325,6 +325,30 @@ document.querySelectorAll('.dl-tab').forEach(tab => {
 $('#btn-tokens').addEventListener('click', () => startScan('tokens'));
 $('#btn-structure').addEventListener('click', () => startScan('structure'));
 $('#btn-both').addEventListener('click', () => startScan('both'));
+$('#btn-mirror').addEventListener('click', () => {
+  document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {
+    (b as HTMLButtonElement).disabled = true;
+    (b as HTMLElement).style.opacity = '0.5';
+  });
+  showStatus('Starting mirror — fetching stylesheets...', 0);
+
+  chrome.runtime.sendMessage({ action: 'startScan', mode: 'mirror' }, (response: any) => {
+    document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {
+      (b as HTMLButtonElement).disabled = false;
+      (b as HTMLElement).style.opacity = '1';
+    });
+    if (chrome.runtime.lastError) { showError(chrome.runtime.lastError.message || 'Error'); return; }
+    if (!response || !response.success) { showError(response?.error || 'Mirror failed.'); return; }
+    if (response.data?.mirror?.downloaded) {
+      const sizeKB = Math.round((response.data.mirror.htmlSize || 0) / 1024);
+      showStatus(`Downloaded! ${sizeKB} KB, ${response.data.mirror.stylesheetCount} stylesheets captured`, 1);
+      hideStatus();
+    } else {
+      showError('Mirror completed but download may have failed.');
+    }
+  });
+});
+
 $('#btn-fullclone').addEventListener('click', () => {
   // Disable buttons
   document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {

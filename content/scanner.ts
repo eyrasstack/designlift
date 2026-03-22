@@ -82,6 +82,52 @@ DL.runScan = async (mode: string): Promise<any> => {
     };
   }
 
+  if (mode === 'mirror') {
+    // TRUE 1:1 MIRROR — captures full DOM + all CSS stylesheets
+    sendProgress(0.05, 'Collecting stylesheet URLs...');
+    const stylesheetUrls = DL._collectStylesheetUrls();
+
+    sendProgress(0.1, `Fetching ${stylesheetUrls.length} external stylesheets...`);
+    let externalCSS: Record<string, string> = {};
+    if (stylesheetUrls.length > 0) {
+      const fetchResponse: any = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ action: 'fetchStylesheets', urls: stylesheetUrls }, resolve);
+      });
+      externalCSS = fetchResponse || {};
+    }
+
+    sendProgress(0.5, 'Building page mirror...');
+    const html = DL.mirrorPage(externalCSS);
+
+    sendProgress(0.85, 'Downloading mirror HTML...');
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    const hostname = window.location.hostname.replace(/\./g, '-');
+    a.download = `${hostname}-mirror.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+
+    // Capture full-page screenshot
+    sendProgress(0.9, 'Capturing full-page screenshot...');
+    try {
+      await DL.captureFullPageScreenshot();
+    } catch (e: any) {
+      console.warn('Screenshot failed:', e.message);
+    }
+
+    result.mirror = {
+      sourceUrl: window.location.href,
+      timestamp: new Date().toISOString(),
+      stylesheetCount: stylesheetUrls.length,
+      htmlSize: html.length,
+      downloaded: true,
+    };
+  }
+
   if (mode === 'structure' || mode === 'both') {
     sendProgress(0.9, 'Cloning page structure...');
     result.structure = DL.cloneStructure();
