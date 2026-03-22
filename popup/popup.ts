@@ -326,36 +326,63 @@ $('#btn-tokens').addEventListener('click', () => startScan('tokens'));
 $('#btn-structure').addEventListener('click', () => startScan('structure'));
 $('#btn-both').addEventListener('click', () => startScan('both'));
 $('#btn-fullclone').addEventListener('click', () => {
-  startScan('clone-full');
-  const check = setInterval(() => {
-    if (scanData?.fullClone?.jsx) {
-      clearInterval(check);
-      const blob = new Blob([scanData.fullClone.jsx], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'clone-full.tsx';
-      a.click();
-      URL.revokeObjectURL(url);
+  // Disable buttons
+  document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {
+    (b as HTMLButtonElement).disabled = true;
+    (b as HTMLElement).style.opacity = '0.5';
+  });
+  showStatus('Starting full clone...', 0);
+
+  chrome.runtime.sendMessage({ action: 'startScan', mode: 'clone-full' }, (response: any) => {
+    // Re-enable buttons
+    document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {
+      (b as HTMLButtonElement).disabled = false;
+      (b as HTMLElement).style.opacity = '1';
+    });
+
+    if (chrome.runtime.lastError) {
+      showError(chrome.runtime.lastError.message || 'Extension error');
+      return;
     }
-  }, 500);
+    if (!response || !response.success) {
+      showError(response?.error || 'Clone failed.');
+      return;
+    }
+
+    const jsx = response.data?.fullClone?.jsx;
+    if (jsx) {
+      showStatus('Downloading...', 1);
+      downloadFile('clone-full.tsx', jsx);
+      hideStatus();
+    } else {
+      showError('Clone completed but no output was generated. The page might be too large — try on a simpler page first.');
+    }
+  });
 });
 
 $('#btn-clone').addEventListener('click', () => {
-  startScan('clone-styled');
-  // Auto-download the styled JSX when scan completes
-  const checkInterval = setInterval(() => {
-    if (scanData?.styledClone?.jsx) {
-      clearInterval(checkInterval);
-      const blob = new Blob([scanData.styledClone.jsx], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'clone.jsx';
-      a.click();
-      URL.revokeObjectURL(url);
+  document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {
+    (b as HTMLButtonElement).disabled = true;
+    (b as HTMLElement).style.opacity = '0.5';
+  });
+  showStatus('Starting styled clone...', 0);
+
+  chrome.runtime.sendMessage({ action: 'startScan', mode: 'clone-styled' }, (response: any) => {
+    document.querySelectorAll('.dl-actions .dl-btn').forEach(b => {
+      (b as HTMLButtonElement).disabled = false;
+      (b as HTMLElement).style.opacity = '1';
+    });
+    if (chrome.runtime.lastError) { showError(chrome.runtime.lastError.message || 'Error'); return; }
+    if (!response || !response.success) { showError(response?.error || 'Clone failed.'); return; }
+    const jsx = response.data?.styledClone?.jsx;
+    if (jsx) {
+      showStatus('Downloading...', 1);
+      downloadFile('clone.jsx', jsx);
+      hideStatus();
+    } else {
+      showError('No output generated.');
     }
-  }, 500);
+  });
 });
 
 // Export buttons
