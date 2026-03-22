@@ -349,13 +349,11 @@ $('#btn-fullclone').addEventListener('click', () => {
       return;
     }
 
-    const jsx = response.data?.fullClone?.jsx;
-    if (jsx) {
-      showStatus('Downloading...', 1);
-      downloadFile('clone-full.tsx', jsx);
+    if (response.data?.fullClone?.downloaded) {
+      showStatus('Downloaded clone-full.tsx!', 1);
       hideStatus();
     } else {
-      showError('Clone completed but no output was generated. The page might be too large — try on a simpler page first.');
+      showError('Clone completed but download may have failed. Check your downloads folder.');
     }
   });
 });

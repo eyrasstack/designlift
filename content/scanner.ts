@@ -51,8 +51,26 @@ DL.runScan = async (mode: string): Promise<any> => {
   }
 
   if (mode === 'clone-full') {
-    // Full 1:1 clone with inline styles — the real deal
-    result.fullClone = DL.fullClone();
+    // Full 1:1 clone with inline styles
+    // Output is too large for message passing — trigger download directly from content script
+    const cloneResult = DL.fullClone();
+    // Create a blob and download directly in the page context
+    const blob = new Blob([cloneResult.jsx], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'clone-full.tsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    // Return metadata only (not the huge JSX string)
+    result.fullClone = {
+      sourceUrl: cloneResult.sourceUrl,
+      timestamp: cloneResult.timestamp,
+      viewport: cloneResult.viewport,
+      downloaded: true,
+    };
   }
 
   if (mode === 'structure' || mode === 'both') {
