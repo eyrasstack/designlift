@@ -84,20 +84,34 @@ DL.extractColors = (elements: HTMLElement[]): any[] => {
     merged.push(group);
   }
 
-  // Assign primary category per color
+  // Assign primary category per color using HSL intelligence
   const categorized = merged.map(c => {
     const hsl = DL.rgbToHsl(c.r, c.g, c.b);
-    // Pick the most meaningful category from the set
-    let category: string;
-    if (c.categories.has('background')) category = 'background';
-    else if (c.categories.has('surface')) category = 'surface';
-    else if (c.categories.has('text')) category = 'text-primary';
-    else if (c.categories.has('border')) category = 'border';
-    else if (c.categories.has('shadow')) category = 'shadow';
-    else category = 'accent';
+    const isGray = hsl.s <= 10;                    // desaturated = gray/neutral
+    const isVeryLight = hsl.l >= 90;               // near white
+    const isVeryDark = hsl.l <= 15;                // near black
+    const isSaturated = hsl.s > 30 && hsl.l > 15 && hsl.l < 85;
 
-    // Override: saturated non-text colors → accent
-    if (hsl.s > 40 && category === 'surface' && hsl.l > 15 && hsl.l < 85) {
+    // Start from the most specific usage context
+    let category: string;
+
+    if (c.categories.has('shadow')) {
+      category = 'shadow';
+    } else if (c.categories.has('border')) {
+      category = 'border';
+    } else if (c.categories.has('text')) {
+      category = 'text-primary'; // refined below
+    } else if (c.categories.has('background')) {
+      // Saturated backgrounds are accents, not plain backgrounds
+      category = isSaturated ? 'accent' : 'background';
+    } else if (c.categories.has('surface')) {
+      category = isSaturated ? 'accent' : 'surface';
+    } else {
+      category = isSaturated ? 'accent' : 'surface';
+    }
+
+    // A text color that is saturated and used infrequently is likely accent-on-text
+    if (category === 'text-primary' && isSaturated && c.count < 10) {
       category = 'accent';
     }
 
@@ -182,7 +196,20 @@ DL.extractTypography = (elements: HTMLElement[]): { tokens: any[]; fontStack: an
   // Sort by font size descending
   const styles = Array.from(styleMap.values()).sort((a, b) => b.fontSize - a.fontSize);
 
-  // Assign semantic roles
+  // Find the page's own scale — use percentile-based thresholds instead of fixed px
+  const allSizes = styles.map(s => s.fontSize).sort((a, b) => b - a);
+  const uniqueSizes = [...new Set(allSizes)];
+  const maxSize = uniqueSizes[0] || 16;
+  const bodySize = styles.reduce((a, b) => a.count > b.count ? a : b, styles[0])?.fontSize || 16;
+
+  // Thresholds are relative to the page's own range
+  const heroThreshold = maxSize * 0.85;         // top 15% of size range
+  const h1Threshold = maxSize * 0.6;            // top 40%
+  const h2Threshold = bodySize * 1.5;           // 1.5x body
+  const h3Threshold = bodySize * 1.15;          // 1.15x body
+  const smallThreshold = bodySize * 0.9;        // below body size
+
+  // Assign semantic roles using relative thresholds
   const tokens: any[] = [];
   const usedRoles = new Set<string>();
   const tagRoleMap: Record<string, string> = { h1: 'h1', h2: 'h2', h3: 'h3', h4: 'h4' };
@@ -191,12 +218,12 @@ DL.extractTypography = (elements: HTMLElement[]): { tokens: any[]; fontStack: an
     let role = tagRoleMap[s.tag] || '';
 
     if (!role) {
-      if (!usedRoles.has('hero') && s.fontSize >= 40) role = 'hero';
-      else if (!usedRoles.has('h1') && s.fontSize >= 32) role = 'h1';
-      else if (!usedRoles.has('h2') && s.fontSize >= 24) role = 'h2';
-      else if (!usedRoles.has('h3') && s.fontSize >= 18) role = 'h3';
-      else if (s.fontSize <= 12 && s.textTransform === 'uppercase') role = 'label';
-      else if (s.fontSize < 14) role = 'small';
+      if (!usedRoles.has('hero') && s.fontSize >= heroThreshold && s.fontSize > h1Threshold) role = 'hero';
+      else if (!usedRoles.has('h1') && s.fontSize >= h1Threshold) role = 'h1';
+      else if (!usedRoles.has('h2') && s.fontSize >= h2Threshold) role = 'h2';
+      else if (!usedRoles.has('h3') && s.fontSize >= h3Threshold) role = 'h3';
+      else if (s.fontSize <= smallThreshold && s.textTransform === 'uppercase') role = 'label';
+      else if (s.fontSize < smallThreshold) role = 'small';
       else continue;
     }
 
@@ -430,23 +457,49 @@ DL.extractShadows = (elements: HTMLElement[]): any[] => {
 // ─── ANIMATIONS EXTRACTION ──────────────────────────────────────────
 
 DL.extractAnimations = (elements: HTMLElement[]): any[] => {
-  const transMap = new Map<string, number>();
+  // Parse individual transition shorthand components from computed style
+  // Computed `transition` is a comma-separated list of: property duration easing delay
+  // But commas also appear inside cubic-bezier(), so we need to parse carefully.
+  const parsed: { property: string; duration: string; easing: string; key: string }[] = [];
+  const freqMap = new Map<string, number>();
 
   for (const el of elements) {
-    const t = getComputedStyle(el).transition;
-    if (t && t !== 'all 0s ease 0s' && t !== 'none') {
-      transMap.set(t, (transMap.get(t) || 0) + 1);
+    const style = getComputedStyle(el);
+    // Use the individual longhand properties — they're arrays of the same length
+    const props = style.transitionProperty;
+    const durs = style.transitionDuration;
+    const easings = style.transitionTimingFunction;
+    const delays = style.transitionDelay;
+
+    if (!props || props === 'none' || props === 'all') continue;
+    // Skip elements with no real transition (0s duration on everything)
+    if (durs === '0s') continue;
+
+    // Split properties (safe to split on comma — no nested commas)
+    const propList = props.split(',').map(s => s.trim());
+    const durList = durs.split(',').map(s => s.trim());
+    // Easing can contain commas inside cubic-bezier() — split carefully
+    const easingList = DL.splitTimingFunctions(easings);
+
+    for (let i = 0; i < propList.length; i++) {
+      const prop = propList[i];
+      const dur = durList[i % durList.length] || '0s';
+      const easing = easingList[i % easingList.length] || 'ease';
+
+      if (dur === '0s') continue;
+
+      const key = `${prop} ${dur} ${easing}`;
+      freqMap.set(key, (freqMap.get(key) || 0) + 1);
     }
   }
 
-  return Array.from(transMap.entries())
+  return Array.from(freqMap.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([raw, freq]) => {
-      const first = raw.split(',')[0].trim();
-      const match = first.match(/([\w-]+)\s+([\d.]+m?s)\s+(.+?)(?:\s+[\d.]+m?s)?$/);
-      return match
-        ? { property: match[1], duration: match[2], easing: match[3], frequency: freq }
+    .map(([key, freq]) => {
+      const parts = key.match(/^([\w-]+)\s+([\d.]+m?s)\s+(.+)$/);
+      return parts
+        ? { property: parts[1], duration: parts[2], easing: parts[3], frequency: freq }
         : { property: 'all', duration: '150ms', easing: 'ease', frequency: freq };
     });
 };
@@ -454,7 +507,7 @@ DL.extractAnimations = (elements: HTMLElement[]): any[] => {
 // ─── BREAKPOINTS EXTRACTION ─────────────────────────────────────────
 
 DL.extractBreakpoints = (): any => {
-  const breakpoints = new Set<string>();
+  const bpFreq = new Map<number, number>();
 
   for (const sheet of Array.from(document.styleSheets)) {
     try {
@@ -463,8 +516,11 @@ DL.extractBreakpoints = (): any => {
           const matches = rule.conditionText.match(/(?:min|max)-width:\s*(\d+)px/g);
           if (matches) {
             matches.forEach(m => {
-              const bp = m.match(/(\d+)px/);
-              if (bp) breakpoints.add(bp[1] + 'px');
+              const bp = m.match(/(\d+)/);
+              if (bp) {
+                const val = parseInt(bp[1]);
+                bpFreq.set(val, (bpFreq.get(val) || 0) + 1);
+              }
             });
           }
         }
@@ -472,7 +528,49 @@ DL.extractBreakpoints = (): any => {
     } catch (e) { /* CORS blocked */ }
   }
 
+  // Cluster nearby breakpoints (within 32px of each other)
+  // Keep the most frequently used value from each cluster
+  const sorted = Array.from(bpFreq.entries()).sort((a, b) => a[0] - b[0]);
+  const clusters: { value: number; freq: number }[] = [];
+
+  for (const [val, freq] of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && Math.abs(val - last.value) <= 32) {
+      // Merge into existing cluster — keep whichever is more common
+      if (freq > last.freq) {
+        last.value = val;
+        last.freq = freq;
+      } else {
+        last.freq += freq;
+      }
+    } else {
+      clusters.push({ value: val, freq });
+    }
+  }
+
+  // Filter to the most significant breakpoints:
+  // Only keep values that appear 2+ times, or fall in common ranges
+  const commonRanges = [
+    [320, 400],   // mobile
+    [560, 700],   // large mobile / small tablet
+    [750, 820],   // tablet
+    [990, 1050],  // small desktop
+    [1200, 1300], // desktop
+    [1400, 1600], // large desktop
+  ];
+
+  const significant = clusters.filter(c => {
+    if (c.freq >= 2) return true;
+    return commonRanges.some(([lo, hi]) => c.value >= lo && c.value <= hi);
+  });
+
+  // Take top 6 by frequency if we still have too many
+  const final = significant.length > 6
+    ? significant.sort((a, b) => b.freq - a.freq).slice(0, 6).sort((a, b) => a.value - b.value)
+    : significant.sort((a, b) => a.value - b.value);
+
   return {
-    breakpoints: Array.from(breakpoints).sort((a, b) => parseInt(a) - parseInt(b))
+    breakpoints: final.map(c => c.value + 'px'),
+    raw: sorted.map(([v]) => v + 'px') // full list for reference
   };
 };

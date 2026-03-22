@@ -98,20 +98,44 @@ DL.cleanDOM = (el: HTMLElement, depth: number = 0): string => {
 
   let tag = el.tagName.toLowerCase();
 
-  // Handle images → placeholder
+  // Handle images — capture src URL alongside placeholder
   if (tag === 'img') {
     const alt = el.getAttribute('alt') || 'image';
-    return `${'  '.repeat(depth)}<div class="dl-image">{/* Image: ${alt} */}</div>\n`;
+    const src = el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy') || '';
+    const srcset = el.getAttribute('srcset') || '';
+    // Pick the best available URL
+    let imageUrl = src;
+    if (!imageUrl && srcset) {
+      // Take the first URL from srcset
+      const firstSrc = srcset.split(',')[0]?.trim().split(/\s+/)[0];
+      if (firstSrc) imageUrl = firstSrc;
+    }
+    const urlComment = imageUrl ? ` src="${imageUrl}"` : '';
+    return `${'  '.repeat(depth)}<img class="dl-image" alt="${alt}"${urlComment} />\n`;
   }
 
-  // Handle video/picture → placeholder
-  if (tag === 'video' || tag === 'picture') {
-    return `${'  '.repeat(depth)}<div class="dl-media">{/* Media element */}</div>\n`;
+  // Handle picture element — extract best source
+  if (tag === 'picture') {
+    const img = el.querySelector('img');
+    const alt = img?.getAttribute('alt') || 'image';
+    const src = img?.getAttribute('src') || '';
+    const urlComment = src ? ` src="${src}"` : '';
+    return `${'  '.repeat(depth)}<img class="dl-image" alt="${alt}"${urlComment} />\n`;
   }
 
-  // Handle SVG → inline icon placeholder
+  // Handle video → placeholder
+  if (tag === 'video') {
+    const poster = el.getAttribute('poster') || '';
+    const src = el.getAttribute('src') || (el.querySelector('source') as HTMLSourceElement)?.src || '';
+    return `${'  '.repeat(depth)}<div class="dl-media">{/* Video: ${src || poster || 'media'} */}</div>\n`;
+  }
+
+  // Handle SVG → inline icon placeholder with dimensions
   if (tag === 'svg') {
-    return `${'  '.repeat(depth)}<span class="dl-icon">{/* SVG icon */}</span>\n`;
+    const w = el.getAttribute('width') || '';
+    const h = el.getAttribute('height') || '';
+    const dims = w && h ? ` ${w}x${h}` : '';
+    return `${'  '.repeat(depth)}<span class="dl-icon">{/* SVG icon${dims} */}</span>\n`;
   }
 
   // Self-closing: input, br, hr

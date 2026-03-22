@@ -48,6 +48,21 @@ DL.runScan = async (mode: string): Promise<any> => {
   if (mode === 'structure' || mode === 'both') {
     sendProgress(0.9, 'Cloning page structure...');
     result.structure = DL.cloneStructure();
+
+    // Collect all image URLs found on the page
+    sendProgress(0.95, 'Collecting image assets...');
+    const images: { src: string; alt: string; width: number; height: number }[] = [];
+    document.querySelectorAll('img').forEach((img: HTMLImageElement) => {
+      const src = img.currentSrc || img.src || img.getAttribute('data-src') || '';
+      if (!src || src.startsWith('data:')) return;
+      images.push({
+        src,
+        alt: img.alt || '',
+        width: img.naturalWidth || img.width || 0,
+        height: img.naturalHeight || img.height || 0
+      });
+    });
+    result.images = images;
   }
 
   sendProgress(1.0, 'Complete!');

@@ -109,6 +109,41 @@ DL.parseGradientColors = (gradient: string): string[] => {
   return colors;
 };
 
+// Split CSS transition-timing-function values safely
+// cubic-bezier(0.21, 0.47, 0.32, 0.98) contains commas, so we can't just split on ","
+DL.splitTimingFunctions = (str: string): string[] => {
+  if (!str) return ['ease'];
+  const result: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) {
+      result.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) result.push(current.trim());
+  return result;
+};
+
+// Map numeric font-weight to its CSS name
+DL.weightName = (w: number): string => {
+  if (w <= 100) return 'thin';
+  if (w <= 200) return 'extralight';
+  if (w <= 300) return 'light';
+  if (w <= 400) return 'regular';
+  if (w <= 500) return 'medium';
+  if (w <= 600) return 'semibold';
+  if (w <= 700) return 'bold';
+  if (w <= 800) return 'extrabold';
+  return 'black';
+};
+
 // Collect visible elements up to a limit (performance guard)
 DL.getVisibleElements = (limit: number = 500): HTMLElement[] => {
   const all = document.querySelectorAll('body *');

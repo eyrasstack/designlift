@@ -32,8 +32,15 @@ DLFormat = {
     const weights = new Set<number>();
     typo.forEach((t: any) => weights.add(t.fontWeight));
     const weightObj: Record<string, number> = {};
-    const wNames = ['bold', 'semibold', 'medium', 'regular', 'light'];
-    Array.from(weights).sort((a, b) => b - a).forEach((w, i) => { weightObj[wNames[i] || `w${w}`] = w; });
+    // Map each weight to its correct CSS name instead of guessing by sort order
+    const weightNameMap: Record<number, string> = {
+      100: 'thin', 200: 'extralight', 300: 'light', 400: 'regular',
+      500: 'medium', 600: 'semibold', 700: 'bold', 800: 'extrabold', 900: 'black'
+    };
+    Array.from(weights).sort((a, b) => a - b).forEach(w => {
+      const name = weightNameMap[w] || `w${w}`;
+      weightObj[name] = w;
+    });
 
     const lhSet = new Set<number>();
     typo.forEach((t: any) => lhSet.add(t.lineHeight));
