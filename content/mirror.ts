@@ -1,4 +1,4 @@
-// DesignLift v3.1 — True 1:1 Mirror Engine (with interactions)
+// DesignLift v3.2.1 — True 1:1 Mirror Engine (with interactions)
 // Captures EVERYTHING: DOM + CSS + fonts + images + interaction scripts.
 // Selectively keeps visual JS (Webflow, jQuery, GSAP, Lottie) while
 // stripping only tracking/analytics/consent scripts.
@@ -364,7 +364,7 @@ DL.mirrorPage = async (externalCSS: Record<string, string>, externalJS: Record<s
   // Add meta
   const meta = document.createElement('meta');
   meta.setAttribute('name', 'generator');
-  meta.setAttribute('content', 'DesignLift Mirror v3.1');
+  meta.setAttribute('content', 'DesignLift Mirror v3.2.1');
   head.insertBefore(meta, head.firstChild);
 
   // Ensure charset
@@ -444,7 +444,7 @@ DL.mirrorPage = async (externalCSS: Record<string, string>, externalJS: Record<s
   }
 
   // Build final HTML
-  const comment = `<!-- Mirrored from ${window.location.href} on ${new Date().toISOString()} by DesignLift v3.1 -->\n`;
+  const comment = `<!-- Mirrored from ${window.location.href} on ${new Date().toISOString()} by DesignLift v3.2.1 -->\n`;
   comment + `<!-- Includes: DOM + CSS + interaction JS (Webflow, jQuery, GSAP) -->\n`;
   return comment + '<!DOCTYPE html>\n' + clone.outerHTML;
 };
