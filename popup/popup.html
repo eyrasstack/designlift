@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=400">
+  <link rel="stylesheet" href="popup.css">
+  <title>DesignLift</title>
+</head>
+<body>
+  <!-- Header -->
+  <div class="dl-header">
+    <div class="dl-logo">
+      <span class="dl-logo-icon">D</span>
+      <div>
+        <h1>DesignLift</h1>
+        <p class="dl-subtitle">Extract design DNA from any site</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="dl-actions">
+    <button id="btn-tokens" class="dl-btn dl-btn-secondary">
+      <span class="dl-btn-icon">&#128269;</span>
+      Extract Design Tokens
+    </button>
+    <button id="btn-structure" class="dl-btn dl-btn-secondary">
+      <span class="dl-btn-icon">&#128208;</span>
+      Clone Page Structure
+    </button>
+    <button id="btn-both" class="dl-btn dl-btn-primary">
+      <span class="dl-btn-icon">&#9889;</span>
+      Extract Both
+    </button>
+  </div>
+
+  <!-- Status -->
+  <div id="status-bar" class="dl-status" style="display:none;">
+    <div class="dl-status-text">
+      <span id="status-label">Ready</span>
+    </div>
+    <div class="dl-progress">
+      <div id="progress-fill" class="dl-progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="error-bar" class="dl-error" style="display:none;">
+    <span id="error-text"></span>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="dl-results" style="display:none;">
+    <!-- Tabs -->
+    <div class="dl-tabs">
+      <button class="dl-tab active" data-tab="colors">Colors</button>
+      <button class="dl-tab" data-tab="type">Type</button>
+      <button class="dl-tab" data-tab="spacing">Space</button>
+      <button class="dl-tab" data-tab="structure">Structure</button>
+      <button class="dl-tab" data-tab="full">Full</button>
+    </div>
+
+    <!-- Tab Content -->
+    <div id="tab-colors" class="dl-tab-content active"></div>
+    <div id="tab-type" class="dl-tab-content"></div>
+    <div id="tab-spacing" class="dl-tab-content"></div>
+    <div id="tab-structure" class="dl-tab-content"></div>
+    <div id="tab-full" class="dl-tab-content"></div>
+
+    <!-- Export Buttons -->
+    <div class="dl-export">
+      <p class="dl-export-label">EXPORT AS</p>
+      <div class="dl-export-grid">
+        <button class="dl-export-btn" id="exp-tailwind">Tailwind Config</button>
+        <button class="dl-export-btn" id="exp-css">CSS Vars</button>
+        <button class="dl-export-btn" id="exp-json">JSON Tokens</button>
+        <button class="dl-export-btn" id="exp-jsx">JSX Components</button>
+      </div>
+      <div class="dl-export-actions">
+        <button class="dl-btn dl-btn-secondary" id="btn-copy-all">
+          <span class="dl-btn-icon">&#128203;</span> Copy All
+        </button>
+        <button class="dl-btn dl-btn-secondary" id="btn-download">
+          <span class="dl-btn-icon">&#128190;</span> Download
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../output/formatters.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
