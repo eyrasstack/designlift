@@ -161,14 +161,15 @@ DL.getElementTailwind = (el: HTMLElement): string => {
   const w = DL.pxToNum(s.width);
   const maxW = DL.pxToNum(s.maxWidth);
   const minW = DL.pxToNum(s.minWidth);
+  const isGridChild = el.parentElement && getComputedStyle(el.parentElement).display === 'grid';
 
   // Full width check
   if (rect.width >= vw * 0.98) {
     c.push('w-full');
   } else if (parentRect && rect.width >= parentRect.width * 0.98 && rect.width > 100) {
     c.push('w-full');
-  } else if (w > 0 && s.width !== 'auto') {
-    // Fixed width — use percentage if it maps cleanly, otherwise px
+  } else if (!isGridChild && w > 0 && s.width !== 'auto') {
+    // Only add percentage widths on NON-grid children (grid uses col-span)
     if (parentRect && parentRect.width > 0) {
       const pct = (rect.width / parentRect.width) * 100;
       if (Math.abs(pct - 50) < 2) c.push('w-1/2');
@@ -179,15 +180,32 @@ DL.getElementTailwind = (el: HTMLElement): string => {
     }
   }
 
-  // Max-width — ALWAYS capture if set
-  if (maxW > 0 && maxW < 9999 && s.maxWidth !== 'none') {
-    if (maxW === 1280) c.push('max-w-7xl');
-    else if (maxW === 1024) c.push('max-w-6xl');
-    else if (maxW === 768) c.push('max-w-4xl');
-    else if (maxW === 640) c.push('max-w-2xl');
-    else if (maxW === 448) c.push('max-w-md');
-    else if (maxW === 320) c.push('max-w-xs');
-    else c.push(`max-w-[${Math.round(maxW)}px]`);
+  // Max-width — ALWAYS capture if set. Also check raw style attribute.
+  let rawMaxW = maxW;
+  // Also check inline/CSS max-width that computed style might resolve to px
+  const rawStyle = el.getAttribute('style') || '';
+  const classAttr = el.getAttribute('class') || '';
+  // Webflow uses specific container classes
+  if (classAttr.includes('container') || classAttr.includes('w-container')) {
+    if (rawMaxW === 0 || rawMaxW >= 9999) rawMaxW = 1280; // default Webflow container
+  }
+
+  if (rawMaxW > 0 && rawMaxW < 9999 && s.maxWidth !== 'none') {
+    if (rawMaxW === 1280) c.push('max-w-7xl');
+    else if (rawMaxW === 1200) c.push('max-w-[1200px]');
+    else if (rawMaxW === 1024) c.push('max-w-6xl');
+    else if (rawMaxW === 768) c.push('max-w-4xl');
+    else if (rawMaxW === 640) c.push('max-w-2xl');
+    else if (rawMaxW === 448) c.push('max-w-md');
+    else if (rawMaxW === 320) c.push('max-w-xs');
+    else c.push(`max-w-[${Math.round(rawMaxW)}px]`);
+  }
+
+  // If element has margin:auto and a width smaller than parent, it's likely a container
+  if (s.marginLeft === 'auto' && s.marginRight === 'auto' && rect.width < vw * 0.95 && rect.width > 400) {
+    if (!c.some(cl => cl.startsWith('max-w'))) {
+      c.push(`max-w-[${Math.round(rect.width)}px]`);
+    }
   }
 
   // Min-width
@@ -198,8 +216,11 @@ DL.getElementTailwind = (el: HTMLElement): string => {
   const maxH = DL.pxToNum(s.maxHeight);
   const minH = DL.pxToNum(s.minHeight);
 
-  if (rect.height >= vh * 0.95 && s.height !== 'auto') c.push('h-screen');
-  else if (s.height !== 'auto' && s.height !== '0px' && h > 0) {
+  // Only add h-screen on top-level sections, not nested elements
+  const depth = DL._getDepth ? DL._getDepth(el) : 99;
+  if (rect.height >= vh * 0.95 && s.height !== 'auto' && depth <= 3) {
+    c.push('h-screen');
+  } else if (s.height !== 'auto' && s.height !== '0px' && h > 0 && !isGridChild) {
     if (parentRect && Math.abs(rect.height - parentRect.height) < 2 && rect.height > 50) c.push('h-full');
   }
 

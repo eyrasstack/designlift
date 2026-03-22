@@ -131,6 +131,17 @@ DL.splitTimingFunctions = (str: string): string[] => {
   return result;
 };
 
+// Get element depth from body
+DL._getDepth = (el: Element): number => {
+  let depth = 0;
+  let node: Element | null = el;
+  while (node && node !== document.body) {
+    depth++;
+    node = node.parentElement;
+  }
+  return depth;
+};
+
 // Map numeric font-weight to its CSS name
 DL.weightName = (w: number): string => {
   if (w <= 100) return 'thin';
