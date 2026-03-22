@@ -2,6 +2,11 @@
 
 var scanData: any = null;
 
+// ─── VERSION DISPLAY ─────────────────────────────────────────────────
+
+const manifest = chrome.runtime.getManifest();
+document.getElementById('version-badge')!.textContent = `v${manifest.version}`;
+
 // ─── DOM REFS ────────────────────────────────────────────────────────
 
 const $ = (sel: string) => document.querySelector(sel) as HTMLElement;
